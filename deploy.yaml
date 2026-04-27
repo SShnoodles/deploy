@@ -1,0 +1,33 @@
+# deploy.yaml — deployment pipeline configuration
+# CLI flags always override values set here.
+
+# ── SSH connection ────────────────────────────────────────────────────────────
+host: 192.168.1.10
+port: 22
+user: root
+password:           # plain-text password (prefer key-based auth)
+# key: ~/.ssh/id_rsa           # path to private key; comment out if using password
+
+# ── Pipeline steps (each step is skipped when left empty) ────────────────────
+
+# 0. pre: run a command before anything else (e.g. stop the service)
+pre: "/opt/app/stop.sh"
+
+# 1. backup: backup remote files before deleting (list of [src, dst] pairs)
+backup:
+  - ["/opt/app", "/opt/app.bak"]
+
+# 2. delete: remote paths to remove before uploading (list, supports multiple)
+delete:
+  - /opt/app/tar.gz
+
+# 3. upload: copy local files to the remote server (list of [src, dst] pairs)
+upload:
+  - ["./app.tar.gz", "/opt/app.tar.gz"]
+
+# 4. extract: decompress archives on the remote server (list of [archive, dest-dir] pairs)
+extract:
+  - ["/opt/app.tar.gz", "/opt/app"]
+
+# 5. post: run a command after extraction (e.g. start the service)
+post: "/opt/app/start.sh"
