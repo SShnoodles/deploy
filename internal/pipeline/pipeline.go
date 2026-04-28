@@ -31,6 +31,7 @@ type Config struct {
 	UploadPaths  [][2]string // pairs of [local-src, remote-dst] to upload
 	ExtractPaths [][2]string // pairs of [remote-archive, dest-dir] to extract
 	PostCmd      string      // command to run after extraction
+	TailCmd      string      // command whose output is streamed until the user presses Ctrl+C
 }
 
 // Run executes the pipeline: connect → delete → upload → extract → exec.
@@ -94,6 +95,14 @@ func Run(cfg Config) error {
 		fmt.Printf("→ post        %s\n", cfg.PostCmd)
 		if err := sshutil.RunRemoteCmd(client, cfg.PostCmd); err != nil {
 			return fmt.Errorf("post: %w", err)
+		}
+	}
+
+	if cfg.TailCmd != "" {
+		fmt.Printf("→ tail        %s\n", cfg.TailCmd)
+		fmt.Println("  (press Ctrl+C to stop)")
+		if err := sshutil.RunRemoteStream(client, cfg.TailCmd); err != nil {
+			return fmt.Errorf("tail: %w", err)
 		}
 	}
 

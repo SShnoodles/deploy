@@ -41,6 +41,7 @@ Default pipeline order:
   5. upload  (--upload, repeatable)
   6. extract (--extract, repeatable)
   7. post    (--post)            ← e.g. start service
+  8. tail    (--tail)            ← stream logs until Ctrl+C
 
 A YAML config file (deploy.yaml / deploy.yml) is loaded automatically when
 present in the working directory. Use --config to specify a custom path.
@@ -112,6 +113,9 @@ CLI flags always override config file values.`,
 		if !changed("post") && fileCfg.PostCmd != "" {
 			cfg.PostCmd = fileCfg.PostCmd
 		}
+		if !changed("tail") && fileCfg.TailCmd != "" {
+			cfg.TailCmd = fileCfg.TailCmd
+		}
 
 		// Validate required fields after merging.
 		if cfg.Host == "" {
@@ -168,4 +172,5 @@ func init() {
 	f.StringArrayVar(&uploadArgs, "upload", nil, "upload local file to remote, format: src:dst (repeatable)")
 	f.StringArrayVar(&extractArgs, "extract", nil, "extract remote archive, format: archive:dest-dir (repeatable)")
 	f.StringVar(&cfg.PostCmd, "post", "", "command to run last (e.g. start service)")
+	f.StringVar(&cfg.TailCmd, "tail", "", "stream remote command output until Ctrl+C (e.g. tail -f /var/log/app.log)")
 }

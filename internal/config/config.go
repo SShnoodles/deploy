@@ -23,6 +23,7 @@ type File struct {
 	Upload   [][2]string `yaml:"upload"`
 	Extract  [][2]string `yaml:"extract"`
 	Post     string      `yaml:"post"`
+	Tail     string      `yaml:"tail"`
 }
 
 // DefaultPaths are the file names probed when --config is not given.
@@ -74,5 +75,6 @@ func Load(path string) (pipeline.Config, error) {
 		UploadPaths:  f.Upload,
 		ExtractPaths: f.Extract,
 		PostCmd:      f.Post,
+		TailCmd:      f.Tail,
 	}, nil
 }

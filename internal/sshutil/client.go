@@ -3,6 +3,8 @@ package sshutil
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -56,4 +58,47 @@ func RunRemoteCmd(client *ssh.Client, cmd string) error {
 	sess.Stdout = os.Stdout
 	sess.Stderr = os.Stderr
 	return sess.Run(cmd)
+}
+
+// RunRemoteStream executes cmd on the remote server and streams its output
+// until the command exits or the user presses Ctrl+C. Ctrl+C is treated as a
+// normal exit (returns nil), not an error.
+func RunRemoteStream(client *ssh.Client, cmd string) error {
+	sess, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	sess.Stdout = os.Stdout
+	sess.Stderr = os.Stderr
+
+	if err := sess.Start(cmd); err != nil {
+		_ = sess.Close()
+		return err
+	}
+
+	// Run Wait in a goroutine so we can race it against a signal.
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- sess.Wait() }()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sig)
+
+	select {
+	case <-sig:
+		// Close the session immediately; the remote process gets HUP/killed.
+		_ = sess.Close()
+		return nil
+	case err := <-waitDone:
+		if isExitSignal(err) {
+			return nil
+		}
+		return err
+	}
+}
+
+func isExitSignal(err error) bool {
+	type signalError interface{ Signal() string }
+	_, ok := err.(signalError)
+	return ok
 }

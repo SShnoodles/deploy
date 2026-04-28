@@ -31,3 +31,7 @@ extract:
 
 # 5. post: run a command after extraction (e.g. start the service)
 post: "/opt/app/start.sh"
+
+# 6. tail: stream a remote command's output until you press Ctrl+C
+#    (useful to verify the service started correctly)
+tail: "tail -f /opt/app/app.log"
