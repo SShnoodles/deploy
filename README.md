@@ -11,7 +11,7 @@ go build -o deploy .
 ## Pipeline order
 
 ```
-connect → pre → backup → delete → upload → extract → post
+connect → pre → backup → delete → upload → extract → post → tail
 ```
 
 | Step | Flag | Description |
@@ -23,8 +23,11 @@ connect → pre → backup → delete → upload → extract → post
 | upload | `--upload` | Upload local files with progress bar (repeatable) |
 | extract | `--extract` | Extract remote archives (repeatable) |
 | post | `--post` | Post-flight command, e.g. start service |
+| tail | `--tail` | Stream remote command output until Ctrl+C or auto-exit |
 
 Omitting a flag (or leaving it empty in the config file) skips that step.
+
+After the pipeline finishes, the process waits up to **5 minutes** then exits automatically. Press **Ctrl+C** at any time to exit immediately.
 
 ## Config file
 
@@ -55,6 +58,9 @@ extract:
   - ["/opt/app/app.tar.gz", "/opt/app"]
 
 post: "/opt/app/start.sh"
+
+# 6. tail: stream a remote command's output until Ctrl+C or auto-exit
+tail: "tail -f /opt/app/app.log"
 ```
 
 Use `--config` to load a different file:
@@ -129,6 +135,7 @@ Use `--config` to load a different file:
       --upload stringArray   Upload file, format: local-path:remote-path (repeatable)
       --extract stringArray  Extract remote archive, format: archive:dest-dir (repeatable)
       --post string          Command to run after all steps
+      --tail string          Stream remote command output until Ctrl+C (e.g. tail -f /var/log/app.log)
 ```
 
 Supported archive formats: `.tar.gz` `.tgz` `.tar.bz2` `.tbz2` `.tar` `.zip`
@@ -145,6 +152,12 @@ Supported archive formats: `.tar.gz` `.tgz` `.tar.bz2` `.tbz2` `.tar` `.zip`
   uploading  [===============================>        ] 18 MB / 24 MB
 → extract     /opt/app/app.tar.gz → /opt/app
 → post        /opt/app/start.sh
+→ tail        tail -f /opt/app/app.log
+  (press Ctrl+C to stop)
+  2026-04-28 10:00:01 INFO  Application started on port 8080
+  2026-04-28 10:00:02 INFO  Connected to database
+^C
 → done
+  (auto-exit in 5 minutes — press Ctrl+C to exit now)
 ```
 

@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"deploy/internal/sshutil"
 
@@ -107,6 +110,16 @@ func Run(cfg Config) error {
 	}
 
 	fmt.Println("→ done")
+	const autoKillDelay = 5 * time.Minute
+	fmt.Printf("  (auto-exit in %.0f minutes — press Ctrl+C to exit now)\n", autoKillDelay.Minutes())
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-time.After(autoKillDelay):
+		fmt.Println("  auto-exit timeout reached, exiting")
+	case <-sig:
+	}
+	signal.Stop(sig)
 	return nil
 }
 
