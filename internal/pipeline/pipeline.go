@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -21,11 +22,12 @@ import (
 // Empty/nil fields cause the corresponding step to be skipped.
 type Config struct {
 	// SSH connection
-	Host     string
-	Port     int
-	User     string
-	Password string
-	KeyFile  string
+	Host       string
+	Port       int
+	User       string
+	Password   string
+	KeyFile    string
+	SuPassword string // root password for su-based elevation (when set, all commands run as root)
 
 	// Pipeline steps (in execution order)
 	PreCmd       string      // command to run before anything else (e.g. stop service)
@@ -50,7 +52,7 @@ func Run(cfg Config) error {
 
 	if cfg.PreCmd != "" {
 		fmt.Printf("→ pre         %s\n", cfg.PreCmd)
-		if err := sshutil.RunRemoteCmd(client, cfg.PreCmd); err != nil {
+		if err := runCmd(client, cfg.PreCmd, cfg.SuPassword); err != nil {
 			return fmt.Errorf("pre: %w", err)
 		}
 	}
@@ -59,14 +61,14 @@ func Run(cfg Config) error {
 		src, dst := pair[0], pair[1]
 		fmt.Printf("→ backup      %s → %s\n", src, dst)
 		cmd := fmt.Sprintf("cp -r %q %q", src, dst)
-		if err := sshutil.RunRemoteCmd(client, cmd); err != nil {
+		if err := runCmd(client, cmd, cfg.SuPassword); err != nil {
 			return fmt.Errorf("backup %s: %w", src, err)
 		}
 	}
 
 	for _, p := range cfg.DeletePaths {
 		fmt.Printf("→ delete      %s\n", p)
-		if err := sshutil.RunRemoteCmd(client, fmt.Sprintf("rm -rf %q", p)); err != nil {
+		if err := runCmd(client, fmt.Sprintf("rm -rf %q", p), cfg.SuPassword); err != nil {
 			return fmt.Errorf("delete %s: %w", p, err)
 		}
 	}
@@ -89,14 +91,14 @@ func Run(cfg Config) error {
 		if err != nil {
 			return err
 		}
-		if err := sshutil.RunRemoteCmd(client, cmd); err != nil {
+		if err := runCmd(client, cmd, cfg.SuPassword); err != nil {
 			return fmt.Errorf("extract %s: %w", archive, err)
 		}
 	}
 
 	if cfg.PostCmd != "" {
 		fmt.Printf("→ post        %s\n", cfg.PostCmd)
-		if err := sshutil.RunRemoteCmd(client, cfg.PostCmd); err != nil {
+		if err := runCmd(client, cfg.PostCmd, cfg.SuPassword); err != nil {
 			return fmt.Errorf("post: %w", err)
 		}
 	}
@@ -195,4 +197,23 @@ func hasSuffix(name string, suffixes ...string) bool {
 		}
 	}
 	return false
+}
+
+// runCmd executes a remote command, routing through su root when suPassword is
+// set, through interactive mode (PTY) for su/sudo commands, or plain otherwise.
+func runCmd(client *ssh.Client, cmd, suPassword string) error {
+	if suPassword != "" {
+		return sshutil.RunRemoteCmdAsSu(client, cmd, suPassword)
+	}
+	if containsSuOrSudo(cmd) {
+		return sshutil.RunRemoteCmdInteractive(client, cmd)
+	}
+	return sshutil.RunRemoteCmd(client, cmd)
+}
+
+var suOrSudoRe = regexp.MustCompile(`\b(su|sudo)\b`)
+
+// containsSuOrSudo reports whether cmd contains the word "su" or "sudo".
+func containsSuOrSudo(cmd string) bool {
+	return suOrSudoRe.MatchString(cmd)
 }

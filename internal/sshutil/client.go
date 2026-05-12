@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/term"
 )
 
 // NewClient creates an SSH client using password or private key authentication.
@@ -60,8 +62,72 @@ func RunRemoteCmd(client *ssh.Client, cmd string) error {
 	return sess.Run(cmd)
 }
 
-// RunRemoteStream executes cmd on the remote server and streams its output
-// until the command exits or the user presses Ctrl+C. Ctrl+C is treated as a
+// RunRemoteCmdInteractive executes a shell command on the remote server with
+// a PTY allocated and stdin connected to the local terminal, allowing
+// interactive password prompts (e.g. for su / sudo commands) with proper
+// masking and Enter-key handling.
+func RunRemoteCmdInteractive(client *ssh.Client, cmd string) error {
+	sess, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer sess.Close()
+
+	// Request a PTY so programs like su/sudo get proper terminal support
+	// (masked password input, correct Enter handling, etc.).
+	fd := int(os.Stdin.Fd())
+	width, height, err := term.GetSize(fd)
+	if err != nil {
+		width, height = 80, 24
+	}
+	termType := os.Getenv("TERM")
+	if termType == "" {
+		termType = "xterm-256color"
+	}
+	modes := ssh.TerminalModes{
+		ssh.ECHO:          1,
+		ssh.TTY_OP_ISPEED: 14400,
+		ssh.TTY_OP_OSPEED: 14400,
+	}
+	if err := sess.RequestPty(termType, height, width, modes); err != nil {
+		return fmt.Errorf("request pty: %w", err)
+	}
+
+	// Put the local terminal in raw mode so keystrokes are forwarded as-is.
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return fmt.Errorf("make raw terminal: %w", err)
+	}
+	defer term.Restore(fd, oldState) //nolint:errcheck
+
+	sess.Stdin = os.Stdin
+	sess.Stdout = os.Stdout
+	sess.Stderr = os.Stderr
+	return sess.Run(cmd)
+}
+
+// RunRemoteCmdAsSu executes cmd on the remote server as root by wrapping it
+// with "su root -c '...'" and piping suPassword to stdin. No PTY is needed;
+// su reads the password from the pipe and exits after the command completes.
+func RunRemoteCmdAsSu(client *ssh.Client, cmd, suPassword string) error {
+	sess, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer sess.Close()
+	wrapped := "su root -c " + shellQuote(cmd)
+	sess.Stdin = strings.NewReader(suPassword + "\n")
+	sess.Stdout = os.Stdout
+	sess.Stderr = os.Stderr
+	return sess.Run(wrapped)
+}
+
+// shellQuote wraps s in single quotes, escaping any embedded single quotes.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// RunRemoteStream executes cmd on the remote server and streams its output// until the command exits or the user presses Ctrl+C. Ctrl+C is treated as a
 // normal exit (returns nil), not an error.
 func RunRemoteStream(client *ssh.Client, cmd string) error {
 	sess, err := client.NewSession()

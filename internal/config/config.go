@@ -12,18 +12,19 @@ import (
 
 // File is the YAML schema. Field names mirror pipeline.Config for clarity.
 type File struct {
-	Host     string      `yaml:"host"`
-	Port     int         `yaml:"port"`
-	User     string      `yaml:"user"`
-	Password string      `yaml:"password"`
-	KeyFile  string      `yaml:"key"`
-	Pre      string      `yaml:"pre"`
-	Backup   [][2]string `yaml:"backup"`
-	Delete   []string    `yaml:"delete"`
-	Upload   [][2]string `yaml:"upload"`
-	Extract  [][2]string `yaml:"extract"`
-	Post     string      `yaml:"post"`
-	Tail     string      `yaml:"tail"`
+	Host       string      `yaml:"host"`
+	Port       int         `yaml:"port"`
+	User       string      `yaml:"user"`
+	Password   string      `yaml:"password"`
+	KeyFile    string      `yaml:"key"`
+	SuPassword string      `yaml:"su_password"`
+	Pre        string      `yaml:"pre"`
+	Backup     [][2]string `yaml:"backup"`
+	Delete     []string    `yaml:"delete"`
+	Upload     [][2]string `yaml:"upload"`
+	Extract    [][2]string `yaml:"extract"`
+	Post       string      `yaml:"post"`
+	Tail       string      `yaml:"tail"`
 }
 
 // DefaultPaths are the file names probed when --config is not given.
@@ -69,6 +70,7 @@ func Load(path string) (pipeline.Config, error) {
 		User:         f.User,
 		Password:     f.Password,
 		KeyFile:      f.KeyFile,
+		SuPassword:   f.SuPassword,
 		PreCmd:       f.Pre,
 		BackupPaths:  f.Backup,
 		DeletePaths:  f.Delete,

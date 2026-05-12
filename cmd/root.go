@@ -116,6 +116,9 @@ CLI flags always override config file values.`,
 		if !changed("tail") && fileCfg.TailCmd != "" {
 			cfg.TailCmd = fileCfg.TailCmd
 		}
+		if cfg.SuPassword == "" && fileCfg.SuPassword != "" {
+			cfg.SuPassword = fileCfg.SuPassword
+		}
 
 		// Validate required fields after merging.
 		if cfg.Host == "" {
@@ -133,6 +136,21 @@ CLI flags always override config file values.`,
 				return fmt.Errorf("read password: %w", err)
 			}
 			cfg.Password = string(raw)
+		}
+		// "su root" as pre-command is a signal to run all pipeline steps as
+		// root. Prompt for the root password (with masking) and clear the
+		// sentinel — elevation is now handled per-command via SuPassword.
+		if cfg.PreCmd == "su root" {
+			if cfg.SuPassword == "" {
+				fmt.Fprintf(os.Stderr, "Root password for %s: ", cfg.Host)
+				raw, err := term.ReadPassword(int(os.Stdin.Fd()))
+				fmt.Fprintln(os.Stderr)
+				if err != nil {
+					return fmt.Errorf("read root password: %w", err)
+				}
+				cfg.SuPassword = string(raw)
+			}
+			cfg.PreCmd = "" // clear sentinel; su elevation is handled per-command
 		}
 		return nil
 	},
